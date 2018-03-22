@@ -96,7 +96,7 @@ program_name = os.path.basename(sys.argv[0])
 program_version = "v%s" % __version__
 program_build_date = str(__updated__)
 program_version_message = '%%(prog)s %s (%s)' % (program_version, program_build_date)
-supported_options = "Only -u/--user, -o/--format, -l/--long, --noheader, -p/--partition, -j/--jobs, -t/--states, -h/--noheader and -w/--nodelist switches are currently supported."
+supported_options = "Only -u/--user, -o/--format, -l/--long, --noheader, -p/--partition, -j/--jobs, -t/--states, -h/--noheader and -w/--nodelist switches are currently supported.  A call of squeue with other options (e.g. -r) will fall back to /usr/bin/squeue"
 using_slurm_squeue = "To use the Slurm squeue, specify the full path /usr/bin/squeue"
 program_shortdesc = """squeue(rc) An squeue replacement that interrogates a shared squeue result, 
 reducing load on the Slurm controller. Results for the current user are shown by default.  
@@ -164,11 +164,18 @@ def getHeaderForColumn(column):
         return column.upper()
     
 
+def fail2squeue():
+    """
+    Use /usr/bin/squeue with sys.argv.  Used when unrecognized arguments are passed in. 
+    """ 
+    cmd = "/usr/bin/squeue %s " % ' '.join(sys.argv[1:])
+    return subprocess.call(cmd, shell=True)
+
+
 class ErrorMessageArgumentParser(ArgumentParser):
     def error(self, message):
         if "unrecognized arguments" in message:
-            self.print_usage(sys.stderr)
-            self.exit(2, '%s: error: %s\n\n%s\n' % (self.prog, message, program_shortdesc))
+            sys.exit(fail2squeue())
         else:
             super(ErrorMessageArgumentParser, self).error(message)
             
@@ -183,7 +190,6 @@ def main(argv=None):  # IGNORE:C0111
 
     # Setup argument parser
     parser = ErrorMessageArgumentParser(description=program_shortdesc, formatter_class=ArgumentDefaultsHelpFormatter, add_help=False)
-    parser.add_argument("-r", "--repeat", dest="repeat", action="store_true", help="Check squeue every %d seconds" % LOOP_INTERVAL)
     parser.add_argument("-u", "--user", help="Get data for the specified user. Comma-separated list is OK. 'all' will retrieve data for all users [default: %s]" % os.environ["USER"])
     parser.add_argument("-w", "--nodelist", dest="nodelist", help="Filter results for the specified nodes.  localhost is mapped to the current host.")
     parser.add_argument("-p", "--partition", dest="partition", help="Filter results for the specified partition.  Comma-separated list is OK.")
@@ -317,60 +323,58 @@ def main(argv=None):  # IGNORE:C0111
     # Covert digits into digit.digit
     formatstr = re.sub(r'(\d+)', r'\1.\1', formatstr)
     
-    while True:
-        try:
-            if connection is not None:
-                cursor = connection.cursor()
-                user = '$|^'.join(re.split(r'\s*,\s*', user))
-                user = '^%s$' % user
-                
-                cursor.execute(sql, [user, partitionre, jobsre, statesre])
-                desc = cursor.description
-                data = [dict(zip([col[0] for col in desc], row)) for row in cursor.fetchall()]
-                headers = dict((col[0], getHeaderForColumn(col[0])) for col in desc)
-                
-                # Print out the header
-                if not args.noheader:
-                    print formatstr.format(**headers)
-                    
-                # Print out each row
-                for row in data:
-                    if "state" in row and has_t:
-                        row["state"] = JOB_STATE_CODES[row["state"]]
-                    # Make sure they're all strings
-                    for k in row.keys():
-                        row[k] = str(row[k])
-                        
-                    passesfilter = True
-                    
-                    # Filter by node if needed
-                    if nodelistre is not None and nodelistre.search(decodeNodeList(row["node_list"])) is None:
-                        passesfilter = False
-                        
-                    if passesfilter:    
-                        print formatstr.format(**row)
-                cursor.close()
-                connection.commit()
-            else:
-                # If there is a problem, fall back to squeue
-                cmd = "/usr/bin/squeue --format='%s' -u %s" % (formatarg, user)
-                if subprocess.call(cmd, shell=True) != 0:
-                    return 1
-                
-            # Stop the loop unless --repeat was set
-            if not args.repeat:
-                break
-            time.sleep(LOOP_INTERVAL)
-        except KeyboardInterrupt:
-            return 0
-        except Exception, e:
-            # If there is a problem, set connection to None and fall back to squeue
+    user = '$|^'.join(re.split(r'\s*,\s*', user))
+    user = '^%s$' % user
+
+    try:
+        if connection is not None:
+            cursor = connection.cursor()
             if DEBUG:
-                sys.stderr.write("Connection error %s\n%s\n" % (str(e), traceback.format_exc()))
-            connection = None
+                print "sql: %s\nuser: %s\npartition: %s" % (sql, user, partitionre)
+            cursor.execute(sql, [user, partitionre, jobsre, statesre])
+            desc = cursor.description
+            data = [dict(zip([col[0] for col in desc], row)) for row in cursor.fetchall()]
+            headers = dict((col[0], getHeaderForColumn(col[0])) for col in desc)
+            
+            # Print out the header
+            if not args.noheader:
+                print formatstr.format(**headers)
+                
+            # Print out each row
+            for row in data:
+                if "state" in row and has_t:
+                    row["state"] = JOB_STATE_CODES[row["state"]]
+                # Make sure they're all strings
+                for k in row.keys():
+                    row[k] = str(row[k])
+                    
+                passesfilter = True
+                
+                # Filter by node if needed
+                if nodelistre is not None and nodelistre.search(decodeNodeList(row["node_list"])) is None:
+                    passesfilter = False
+                    
+                if passesfilter:    
+                    print formatstr.format(**row)
+            cursor.close()
+            connection.commit()
+        else:
+            # If there is a problem, fall back to squeue
+            cmd = "/usr/bin/squeue --format='%s' -u %s" % (formatarg, user)
+            if subprocess.call(cmd, shell=True) != 0:
+                return 1
+            
+    except KeyboardInterrupt:
+        return 0
+    except Exception, e:
+        # If there is a problem, set connection to None and fall back to squeue
+        if DEBUG:
+            sys.stderr.write("Connection error %s\n%s\n" % (str(e), traceback.format_exc()))
+        connection = None
             
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
