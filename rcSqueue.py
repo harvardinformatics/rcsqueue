@@ -273,7 +273,7 @@ def main(argv=None):  # IGNORE:C0111
         select * 
         from  jobs_squeueresults 
         where user regexp %s and
-              partition regexp %s and 
+              `partition` regexp %s and 
               jobid regexp %s and 
               state regexp %s 
     """.translate(None, "\n")
