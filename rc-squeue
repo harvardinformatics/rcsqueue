@@ -220,7 +220,7 @@ def main(argv=None):  # IGNORE:C0111
     statesre = ".*"
     if args.states != 'all':
         # Swap the JOB_STATE_CODES dict to that abbreviated states can be searched as full names
-        abbrevtrans = dict((v, k) for k, v in JOB_STATE_CODES.iteritems())
+        abbrevtrans = dict((v, k) for k, v in JOB_STATE_CODES.items())
         states = args.states.split(',')
         for i, state in enumerate(states):
             if state in abbrevtrans:
@@ -316,7 +316,7 @@ def main(argv=None):  # IGNORE:C0111
     
     # Convert one letter codes into column names so that query result dict can be 
     # used in the format statement
-    for k, v in SQUEUE_FIELDS.iteritems():
+    for k, v in SQUEUE_FIELDS.items():
         formatstr = re.sub(r'{([>\d]+)' + k + '}', r'{' + v + r':\1}', formatstr)
         formatstr = formatstr.replace("{%s}" % k, "{%s}" % v)        
         
