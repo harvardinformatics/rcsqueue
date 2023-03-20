@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # encoding: utf-8
 '''
 squeue(rc)  -- An RC squeue query tool that interrogates a central Slurm squeue output
@@ -23,7 +23,7 @@ from argparse import ArgumentDefaultsHelpFormatter
 __all__ = []
 __version__ = 0.1
 __date__ = '2015-03-27'
-__updated__ = '2015-05-28'
+__updated__ = '2023-03-20'
 
 DEBUG = os.environ.get("SQUEUE_DEBUG", False)
 
@@ -276,7 +276,7 @@ def main(argv=None):  # IGNORE:C0111
               `partition` regexp %s and 
               jobid regexp %s and 
               state regexp %s 
-    """.translate(None, "\n")
+    """.translate(str.maketrans('','',"\n"))
     
     """
     Connection attempt is made.  After MAX_ATTEMPTS tries,
@@ -288,7 +288,7 @@ def main(argv=None):  # IGNORE:C0111
     while connection is None and connection_attempts < MAX_ATTEMPTS:
         try:
             connection = MySQLdb.connect(**SQL_DSN)
-        except Exception, e:
+        except Exception as e:
             if DEBUG:
                 sys.stderr.write("Connection error %s\n%s\n" % (str(e), traceback.format_exc()))
             time.sleep(CONNECTION_WAIT)
@@ -330,7 +330,7 @@ def main(argv=None):  # IGNORE:C0111
         if connection is not None:
             cursor = connection.cursor()
             if DEBUG:
-                print "sql: %s\nuser: %s\npartition: %s" % (sql, user, partitionre)
+                print("sql: %s\nuser: %s\npartition: %s" % (sql, user, partitionre))
             cursor.execute(sql, [user, partitionre, jobsre, statesre])
             desc = cursor.description
             data = [dict(zip([col[0] for col in desc], row)) for row in cursor.fetchall()]
@@ -338,7 +338,7 @@ def main(argv=None):  # IGNORE:C0111
             
             # Print out the header
             if not args.noheader:
-                print formatstr.format(**headers)
+                print(formatstr.format(**headers))
                 
             # Print out each row
             for row in data:
@@ -355,7 +355,7 @@ def main(argv=None):  # IGNORE:C0111
                     passesfilter = False
                     
                 if passesfilter:    
-                    print formatstr.format(**row)
+                    print(formatstr.format(**row))
             cursor.close()
             connection.commit()
         else:
@@ -366,7 +366,7 @@ def main(argv=None):  # IGNORE:C0111
             
     except KeyboardInterrupt:
         return 0
-    except Exception, e:
+    except Exception as e:
         # If there is a problem, set connection to None and fall back to squeue
         if DEBUG:
             sys.stderr.write("Connection error %s\n%s\n" % (str(e), traceback.format_exc()))
